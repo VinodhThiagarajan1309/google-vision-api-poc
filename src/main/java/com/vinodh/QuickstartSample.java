@@ -33,18 +33,19 @@ public class QuickstartSample {
 
         try {
 
-            File f = new File("/Users/vthiagarajan/Documents/WorkSpaces/HomeawayMavenProjects/google-vision-api-poc/src/main/resources/error-driven.txt");
+            File f = new File("./src/main/resources/part-00000.txt");
 
             System.out.println("Reading files using Apache IO:");
 
             List<String> lines = FileUtils.readLines(f, "UTF-8");
 int iCount = 0 ;
+            QuickstartSample obj = new QuickstartSample();
             for (String line : lines) {
                 //System.out.println(line);
-                detectWebDetectionsGcsFromDownloadedImage(line.split(" "),iCount);
+                obj.detectWebDetectionsGcs(line.split("\\,"));
                 System.out.println(iCount++);
             }
-            File f2 = new File("/home/ec2-user/1/output.txt");
+            File f2 = new File("./src/main/resources/output.txt");
             FileUtils.writeStringToFile(f2, "VINODH TOOK THE BLOW" +"\n", true);
 
         } catch (IOException e) {
@@ -52,82 +53,72 @@ int iCount = 0 ;
         }
     }
 
-    public static void detectWebDetectionsGcs(String[] record) throws Exception,
+    public  void detectWebDetectionsGcs(String[] record) throws Exception,
         IOException {
-        //List<ImageDataHolder> imageDataHolders = new ArrayList();
+
+        // Parse incoming requests
         long hostId = Long.valueOf(record[0].trim().toString());
         long property_id = Long.valueOf(record[1].trim().toString());
         String filePath = record[2].trim().toString();
-        List<AnnotateImageRequest> requests = new ArrayList();
 
-       // ByteString imgBytes = ByteString.readFrom(new FileInputStream(filePath));
-
+        // Build Image from URI
         ImageSource imgSource = ImageSource.newBuilder().setImageUri(filePath).build();
-
-       // Image img = Image.newBuilder().setContent(imgBytes).build();
         Image img = Image.newBuilder().setSource(imgSource).build();
 
+        // Build Google Vision API request
         Feature feat = Feature.newBuilder().setType(Type.WEB_DETECTION).build();
         AnnotateImageRequest request =
             AnnotateImageRequest.newBuilder().addFeatures(feat).setImage(img).build();
+
+        // Collect batch of requests
+        List<AnnotateImageRequest> requests = new ArrayList();
         requests.add(request);
 
         try  {
+            // Create client
             ImageAnnotatorClient client = ImageAnnotatorClient.create();
+
+            // Submit Requests
             BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
+
+            // Collect Responses
             List<AnnotateImageResponse> responses = response.getResponsesList();
 
             for (AnnotateImageResponse res : responses) {
                 if (res.hasError()) {
-                    File f = new File("/home/ec2-user/1/error.txt");
+                    File f = new File("./src/main/resources/error.txt");
                     FileUtils.writeStringToFile(f, hostId + " " + property_id + " " + filePath + "\n", true);
-
                     System.out.println(res.getError().getMessage());
                     return;
                 }
 
+                // Prep Java Collectors
                 ImageDataHolder imageDataHolder = new ImageDataHolder();
                 imageDataHolder.setPropertyId(property_id);
                 imageDataHolder.setHostId(hostId);
                 imageDataHolder.setImageUrl(filePath);
-                // Search the web for usages of the image. You could use these signals later
-                // for user input moderation or linking external references.
-                // For a full list of available annotations, see http://g.co/cloud/vision/docs
                 WebDetection annotation = res.getWebDetection();
-                //System.out.println("Entity:Id:Score");
-                //System.out.println("===============");
                 List<ImageAndScore> matchList = new ArrayList<ImageAndScore>();
                 List<ImageAndScore> partialMatchList = new ArrayList<ImageAndScore>();
                 List<ImageAndScore> fullMatchList = new ArrayList<ImageAndScore>();
                 List<ImageAndScore> visMatchList = new ArrayList<ImageAndScore>();
-                /*for (WebDetection.WebEntity entity : annotation.getWebEntitiesList()) {
-                    System.out.println(entity.getDescription() + " : " + entity.getEntityId() + " : "
-                        + entity.getScore());
-                }*/
 
-              ///  System.out.println("\nPages with matching images: Score\n==");
+                // Parse response and set into Java objects
+                ImageAndScore imageAndScore;
                 for (WebDetection.WebPage page : annotation.getPagesWithMatchingImagesList()) {
-                    ImageAndScore imageAndScore = ImageAndScore.of(page.getUrl() , page.getScore());
-                   // System.out.println(page.getUrl() + " : " + page.getScore());
+                     imageAndScore = ImageAndScore.of(page.getUrl() , page.getScore());
                     matchList.add(imageAndScore);
                 }
-               // System.out.println("\nPages with partially matching images: Score\n==");
                 for (WebDetection.WebImage  image : annotation.getPartialMatchingImagesList()) {
-                    ImageAndScore imageAndScore = ImageAndScore.of(image.getUrl() , image.getScore());
-                   // System.out.println(image.getUrl() + " : " + image.getScore());
+                     imageAndScore = ImageAndScore.of(image.getUrl() , image.getScore());
                     partialMatchList.add(imageAndScore);
                 }
-               // System.out.println("\nPages with fully matching images: Score\n==");
                 for (WebDetection.WebImage image : annotation.getFullMatchingImagesList()) {
-                    ImageAndScore imageAndScore = ImageAndScore.of(image.getUrl() , image.getScore());
-                   // System.out.println(image.getUrl() + " : " + image.getScore());
+                     imageAndScore = ImageAndScore.of(image.getUrl() , image.getScore());
                     fullMatchList.add(imageAndScore);
                 }
-
-                //System.out.println("\nPages with fully Visually Similar Images: Score\n==");
                 for (WebDetection.WebImage image : annotation.getVisuallySimilarImagesList()) {
-                    ImageAndScore imageAndScore = ImageAndScore.of(image.getUrl(), image.getScore());
-                   // System.out.println(image.getUrl() + " : " + image.getScore());
+                     imageAndScore = ImageAndScore.of(image.getUrl(), image.getScore());
                     visMatchList.add(imageAndScore);
                 }
 
@@ -136,21 +127,13 @@ int iCount = 0 ;
                 imageDataHolder.setFullyMatchingImageUrls(fullMatchList);
                 imageDataHolder.setVisuallySimilarImageUrls(visMatchList);
 
+                // Convert Object to String
                 Gson gson = new Gson();
-              /*  Staff obj = new Staff();
-
-                // 1. Java object to JSON, and save into a file
-                gson.toJson(obj, new FileWriter("D:\\file.json"));
-*/
-                // 2. Java object to JSON, and assign to a String
                 String jsonInString = gson.toJson(imageDataHolder);
-                imageDataHolder = null;
 
-               // System.out.println(jsonInString);
-                File f = new File("/home/ec2-user/1/output.txt");
+                // Write the deserialized object into output
+                File f = new File("./src/main/resources/output.txt");
                 FileUtils.writeStringToFile(f, jsonInString+"\n", true);
-
-                //imageDataHolders.add(imageDataHolder);
             }
         } catch ( Exception e) {
             System.out.println("Google Try Catch");
@@ -158,6 +141,19 @@ int iCount = 0 ;
 
         }
 
+    }
+
+    public List<ImageAndScore> trySeparateMethod(List<WebDetection.WebImage> lst) {
+        List<ImageAndScore> visMatchList = new ArrayList<ImageAndScore>();
+        //System.out.println("\nPages with fully Visually Similar Images: Score\n==");
+        for (WebDetection.WebImage image : lst) {
+            ImageAndScore imageAndScore = ImageAndScore.of(image.getUrl(), image.getScore());
+            //imageAndScore = null;
+            // System.out.println(image.getUrl() + " : " + image.getScore());
+            visMatchList.add(imageAndScore);
+            imageAndScore =null;
+        }
+        return visMatchList;
     }
 
     public static void detectWebDetectionsGcsFromDownloadedImage(String[] record, int iCount) throws Exception,
